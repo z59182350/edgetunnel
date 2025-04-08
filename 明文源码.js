@@ -1,6 +1,6 @@
 const config = {
   WebToken: 'sub',//beiwei
-  FileName: 'Colab',MainData: '',urls: [],subconverter: "SUBAPI.CMLiussss.net",subconfig: "https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini", subProtocol: 'https',
+  FileName: 'Vless',MainData: '',urls: [],subconverter: "SUBAPI.CMLiussss.net",subconfig: "https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini", subProtocol: 'https',
 };
 export default {
   async fetch(request, env) {
@@ -50,19 +50,36 @@ export default {
       }
   }
 };
+function formatVlessLink({ protocol = '', uuid = '', address = '', port = '', encryption = '', security = '', sni = '', fingerprint = '', path = '', type = '', publicKey = '', shortId = '', flow = '', hostname = '', additionalParams: { host = '' } = {}}) {
+  return `${protocol}://${uuid}@${address}:${port}?security=${security}&sni=${sni}&fp=${fingerprint}&type=${type}&path=${path}&host=${host}&pbk=${publicKey}&sid=${shortId}&flow=${flow}&encryption=${encryption}#${encodeURIComponent(hostname)}`;
+}
 async function fetchAndDecryptData() {
-  const apiUrl = 'https://d.kstore.dev/download/9980/b/beiwei';
-  const headers = { 'accept': '/', 'appversion': '1.3.1', 'user-agent': 'SkrKK/1.3.1', 'content-type': 'application/x-www-form-urlencoded' };
-  const key = new TextEncoder().encode('65151f8d966bf596');
-  const iv = new TextEncoder().encode('88ca0f0ea1ecf975');
+  const apiUrl = 'https://vless.enkelte.ggff.net/vless_list';
+  const keyApiUrl = 'https://key.enkelte.ggff.net/';
   try {
-      const encryptedData = await (await fetch(apiUrl, { headers })).text();
-      const decryptedData = await aes128cbcDecrypt(encryptedData, key, iv);
-      const data = JSON.parse(decryptedData.match(/({.*})/)[0]).data;
-      config.MainData = data.map(o => `ss://${btoa(`aes-256-cfb:${o.password}`)}@${o.ip}:${o.port}#${encodeURIComponent(o.title || '未命名')}`).join('\n');
+    const { key, iv } = await (await fetch(keyApiUrl)).json();
+    const decodedKey = atob(key);
+    const decodedIv = atob(iv);
+    const encryptedData = await (await fetch(apiUrl)).text();
+    const decryptedJson = await decryptAES(atob(encryptedData), decodedKey, decodedIv);
+    const data = JSON.parse(decryptedJson).data;
+    config.MainData = data.map(formatVlessLink).join('\n');
   } catch (error) {
-      throw new Error('Error fetching or decrypting data: ' + error.message);
+    throw new Error('Error fetching or decrypting data: ' + error.message);
   }
+}
+async function decryptAES(data, key, iv) {
+  const decoder = new TextDecoder('utf-8');
+  const encoder = new TextEncoder();
+  const keyBuffer = encoder.encode(key);
+  const ivBuffer = encoder.encode(iv);
+  const dataBuffer = hexToUint8Array(data);
+  const cryptoKey = await crypto.subtle.importKey('raw', keyBuffer, { name: 'AES-CBC' }, false, ['decrypt']);
+  const decryptedData = await crypto.subtle.decrypt({ name: 'AES-CBC', iv: ivBuffer }, cryptoKey, dataBuffer);
+  return decoder.decode(decryptedData);
+}
+function hexToUint8Array(hex) {
+  return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 }
 function determineSubscriptionFormat(userAgent, url) {
   if (userAgent.includes('null') || userAgent.includes('subconverter')) return 'base64';
